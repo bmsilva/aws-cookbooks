@@ -1,0 +1,102 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Creates EC2 instance on a VPC with public access
+Parameters:
+  AppName:
+    Description: "App name to be used just to add context"
+    Type: String
+    Default: "app"
+  EnvironmentSuffix:
+    Description: "App Environment suffix (ex: dev/stg/tst/uat/prd)"
+    Type: String
+    Default: "dev"
+    AllowedValues: ["dev", "stg", "tst", "uat", "prd"]
+  AppVpcStackName:
+    Description: "Name of VPC Stack"
+    Type: String
+    Default: "app-vpc-dev"
+  VpcAz:
+    Description: "Availability Zone to be used for EC2"
+    Type: String
+    Default: "a"
+    AllowedValues: ["a", "b", "c", "d"]
+  Ec2AmiId:
+    Description: EC2 AMI ID to use
+    Type: AWS::EC2::Image::Id
+    Default: "ami-099926fbf83aa61ed"
+  Ec2InstanceType:
+    Description: "Type of Ec2Instance"
+    Type: String
+    Default: "t3.micro"
+  Ec2KeyName:
+    Description: EC2 key pair to use on instance
+    Type: String
+    Default: "ec2keypair"
+  SshCidrBlock:
+    Description: "Restrict 22 port to a cidr block"
+    Type: String
+    AllowedPattern: \d+.\d+.\d+.\d+/\d+
+    Default: "0.0.0.0/0"
+
+Resources:
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${AppName}-${EnvironmentSuffix}-ssh-web-security-group"
+      GroupDescription: !Sub "${AppName} SSH/HTTP/HTTPS security group"
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${AppVpcStackName}:AppVpc"
+      SecurityGroupIngress:
+        -
+          CidrIp: !Ref "SshCidrBlock"
+          Description: "Inbound Rule for SSH"
+          IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+        -
+          CidrIp: "0.0.0.0/0"
+          Description: "Inbound Rule for HTTP"
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+        -
+          CidrIp: "0.0.0.0/0"
+          Description: "Inbound Rule for HTTPS"
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+      SecurityGroupEgress:
+        -
+          CidrIp: "0.0.0.0/0"
+          Description: "All traffic"
+          IpProtocol: "-1"
+          FromPort: -1
+          ToPort: -1
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref "Ec2AmiId"
+      AvailabilityZone: !Sub "${AWS::Region}${VpcAz}"
+      InstanceType: !Ref "Ec2InstanceType"
+      KeyName: !Ref "Ec2KeyName"
+      SubnetId:
+        Fn::ImportValue:
+          !Sub "${AppVpcStackName}:AppPubSubnet0"
+      SecurityGroupIds:
+        - !Ref "AppSecurityGroup"
+      Tags:
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref "Ec2Instance"
+      Domain: vpc
+
+Outputs:
+  InstanceIP:
+    Value: !Ref AppEIP

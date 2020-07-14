@@ -1,0 +1,280 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates a VPC with public and private subnets"
+Parameters:
+  AppName:
+    Description: "App name to be used just to add context"
+    Type: String
+    Default: "app"
+  EnvironmentSuffix:
+    Description: "App Environment suffix (ex: dev/stg/tst/uat/prd)"
+    Type: String
+    Default: "dev"
+    AllowedValues: ["dev", "stg", "tst", "uat", "prd"]
+  VpcAzs:
+    Description: "Availability Zones to be used in the VPC"
+    Type: CommaDelimitedList
+    Default: "a,b,c"
+  VpcCidrBlock:
+    Description: "VPC CIDR block to be used"
+    Type: String
+    AllowedPattern: \d+.\d+.\d+.\d+/\d+
+    Default: "10.0.0.0/16"
+  AppPubSubnetCidrBlocks:
+    Description: "CIDR blocks to be used on the public subnets"
+    Type: CommaDelimitedList
+    Default: "10.0.0.0/24,10.0.1.0/24,10.0.2.0/24"
+  AppPrvSubnetCidrBlocks:
+    Description: "CIDR blocks to be used on the private subnets"
+    Type: CommaDelimitedList
+    Default: "10.0.10.0/24,10.0.11.0/24,10.0.12.0/24"
+
+Resources:
+
+  AppVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-vpc"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPubEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  AppPubInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-igw-pub"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppVpcGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref "AppPubInternetGateway"
+      VpcId: !Ref "AppVpc"
+
+  #
+  # >>> Private Subnets <<<
+  #
+
+  AppPrvRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "AppVpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-rt-prv"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPrvSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [0, !Ref "VpcAzs"]
+      VpcId: !Ref "AppVpc"
+      CidrBlock: !Select [0, !Ref "AppPrvSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-prv-0"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPrvSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [1, !Ref "VpcAzs"]
+      VpcId: !Ref "AppVpc"
+      CidrBlock: !Select [1, !Ref "AppPrvSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-prv-1"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPrvSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [2, !Ref "VpcAzs"]
+      VpcId: !Ref "AppVpc"
+      CidrBlock: !Select [2, !Ref "AppPrvSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-prv-2"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPrvSubnet0RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPrvRouteTable"
+      SubnetId: !Ref "AppPrvSubnet0"
+  AppPrvSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPrvRouteTable"
+      SubnetId: !Ref "AppPrvSubnet1"
+  AppPrvSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPrvRouteTable"
+      SubnetId: !Ref "AppPrvSubnet2"
+
+  #
+  # >>> Public Subnets <<<
+  #
+
+  AppPubRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref "AppVpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-rt-pub"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPubSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [0, !Ref "VpcAzs"]
+      VpcId: !Ref AppVpc
+      CidrBlock: !Select [0, !Ref "AppPubSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-pub-0"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [1, !Ref "VpcAzs"]
+      VpcId: !Ref AppVpc
+      CidrBlock: !Select [1, !Ref "AppPubSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-pub-1"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPubSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub
+        - "${AWS::Region}${AZ}"
+        - AZ: !Select [2, !Ref "VpcAzs"]
+      VpcId: !Ref AppVpc
+      CidrBlock: !Select [2, !Ref "AppPubSubnetCidrBlocks"]
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${AppName}-${EnvironmentSuffix}-subnet-pub-2"
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppPubSubnet0RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPubRouteTable"
+      SubnetId: !Ref "AppPubSubnet0"
+  AppPubSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPubRouteTable"
+      SubnetId: !Ref "AppPubSubnet1"
+  AppPubSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref "AppPubRouteTable"
+      SubnetId: !Ref "AppPubSubnet2"
+
+  #
+  # >>> Routing <<<
+  #
+
+  AppPrvNatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt AppPubEIP.AllocationId
+      SubnetId: !Ref "AppPubSubnet0"
+  AppPrvRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref "AppPrvNatGateway"
+      RouteTableId: !Ref "AppPrvRouteTable"
+  AppPubRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref "AppPubInternetGateway"
+      RouteTableId: !Ref "AppPubRouteTable"
+
+Outputs:
+  AppVpc:
+    Value: !Ref "AppVpc"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppVpc"]]
+  AppPrvSubnet0:
+    Value: !Ref "AppPrvSubnet0"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPrvSubnet0"]]
+  AppPrvSubnet1:
+    Value: !Ref "AppPrvSubnet1"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPrvSubnet1"]]
+  AppPrvSubnet2:
+    Value: !Ref "AppPrvSubnet2"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPrvSubnet2"]]
+  AppPubSubnet0:
+    Value: !Ref "AppPubSubnet0"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPubSubnet0"]]
+  AppPubSubnet1:
+    Value: !Ref "AppPubSubnet1"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPubSubnet1"]]
+  AppPubSubnet2:
+    Value: !Ref "AppPubSubnet2"
+    Export:
+      Name: !Join [':', [{"Ref": "AWS::StackName"}, "AppPubSubnet2"]]

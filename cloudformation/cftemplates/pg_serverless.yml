@@ -1,0 +1,76 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates a Postgres Aurora Serverless"
+Parameters:
+  AppName:
+    Description: "App name to be used just to add context"
+    Type: String
+    Default: "app"
+  DbClusterName:
+    Description: "DB Cluster name"
+    Type: String
+    Default: "pg-serverless-db"
+  EnvironmentSuffix:
+    Description: "App Environment suffix (ex: dev/stg/tst/uat/prd)"
+    Type: String
+    Default: "dev"
+    AllowedValues: ["dev", "stg", "tst", "uat", "prd"]
+  AppVpcStackName:
+    Description: "Name of VPC Stack"
+    Type: String
+    Default: "app-vpc-dev"
+  VpcAzs:
+    Description: "Availability Zones to be used in the DB Cluster"
+    Type: CommaDelimitedList
+    Default: "a,b,c"
+  DbCredentialsSecretName:
+    Description: "Name of the secrets manager db credentials"
+    Type: String
+
+Resources:
+  AppDbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "SubnetGroup for ${DbClusterName}-${EnvironmentSuffix}"
+      DBSubnetGroupName: !Sub "${DbClusterName}-${EnvironmentSuffix}-subnet-group"
+      SubnetIds:
+        - Fn::ImportValue: !Sub "${AppVpcStackName}:AppPrvSubnet0"
+        - Fn::ImportValue: !Sub "${AppVpcStackName}:AppPrvSubnet1"
+        - Fn::ImportValue: !Sub "${AppVpcStackName}:AppPrvSubnet2"
+      Tags:
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
+
+  AppDb:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      AvailabilityZones:
+        - !Sub
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [0, !Ref "VpcAzs"]
+        - !Sub
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [1, !Ref "VpcAzs"]
+        - !Sub
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [2, !Ref "VpcAzs"]
+      BackupRetentionPeriod: 8
+      DBClusterIdentifier: !Sub "${DbClusterName}-${EnvironmentSuffix}"
+      DBSubnetGroupName: !Ref AppDbSubnetGroup
+      DeletionProtection: true
+      Engine: aurora-postgresql
+      EngineMode: serverless
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DbCredentialsSecretName}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DbCredentialsSecretName}:SecretString:password}}"
+      ScalingConfiguration:
+        AutoPause: true
+        MaxCapacity: 8
+        MinCapacity: 2
+        SecondsUntilAutoPause: 14400  # 60 * 60 * 4 = 14400
+      Tags:
+        - Key: "AppName"
+          Value: !Ref "AppName"
+        - Key: "Environment"
+          Value: !Ref "EnvironmentSuffix"
