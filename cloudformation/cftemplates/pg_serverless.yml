@@ -74,3 +74,11 @@ Resources:
           Value: !Ref "AppName"
         - Key: "Environment"
           Value: !Ref "EnvironmentSuffix"
+
+Outputs:
+  AppDb:
+    Value: !Ref "AppDb"
+  AppDbEndpoint:
+    Value: !GetAtt "AppDb.Endpoint.Address"
+  AppDbEndpointPort:
+    Value: !GetAtt "AppDb.Endpoint.Port"
